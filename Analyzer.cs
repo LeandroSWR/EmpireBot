@@ -1,9 +1,8 @@
 ﻿using OpenQA.Selenium;
-using System.Collections.Generic;
 
 namespace CSGOEmpireBot
 {
-    internal class Analyzer
+    public class Analyzer
     {
         private readonly IWebDriver _driver;
         // The div data-v might change as the website is updated
@@ -14,8 +13,31 @@ namespace CSGOEmpireBot
             _driver = driver;
         }
 
-        public IReadOnlyList<IWebElement> GetDivElements() =>
-            _driver.FindElements(By.CssSelector(selector));
+        public string GetRollingText()
+        {
+            // Find the div element
+            IReadOnlyList<IWebElement> divElements = _driver.FindElements(By.CssSelector(selector));
+
+            try
+            {
+                if (divElements.Count > 0)
+                {
+                    return divElements[0].Text;
+                }
+            }
+            catch (StaleElementReferenceException)
+            {
+                // Handle the StaleElementReferenceException by re-finding the element
+                divElements = _driver.FindElements(By.CssSelector(selector));
+
+                if (divElements.Count > 0)
+                {
+                    return divElements[0].Text;
+                }
+            }
+
+            return "Uninitialized";
+        }
 
         public List<IWebElement> GetPreviousRolls() =>
             _driver.FindElements(
