@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Threading;
+using CSGOEmpireBot;
 using OpenQA.Selenium;
 using OpenQA.Selenium.Chrome;
 
@@ -9,35 +10,16 @@ class Program
 {
     static void Main(string[] args)
     {
-        Console.SetWindowSize(105, 58);
-        Console.CursorVisible = false;
+        
+        WebDriverManager webDriverManager = new WebDriverManager();
+        Analyzer analyzer = new Analyzer(webDriverManager.Driver);
+        ConsoleUI consoleUI = new ConsoleUI();
 
-        // Set up Chrome options and create the WebDriver
-        ChromeOptions options = new ChromeOptions();
-        options.SetLoggingPreference(LogType.Browser, LogLevel.Off);
-        options.SetLoggingPreference(LogType.Driver, LogLevel.Off);
-        options.AddArgument("--log-level=3");
-        //options.AddArgument("--headless"); // Run Chrome in headless mode (without GUI)
-
-        ChromeDriverService driverService = ChromeDriverService.CreateDefaultService();
-        driverService.HideCommandPromptWindow = true; // This hides the command prompt window
-        driverService.SuppressInitialDiagnosticInformation = true; // This will suppress initial diagnostic information
-
-        IWebDriver driver = new ChromeDriver(driverService, options);
-
-        // Navigate to the website
-        driver.Url = "https://csgoempire.com";
-
-        // Wait for the page to load (you may need to adjust the time as needed)
+        // Wait for the page to load (adjust as needed)
         Thread.Sleep(2500);
 
-        // Define the CSS selector for the div element
-        string divSelector = "div[data-v-851a155c].font-numeric.text-2xl.font-bold";
-
         bool rollGoing = false;
-
         List<string> previousCoins = new List<string>();
-
         int ctTrain = 0;
         int tTrain = 0;
         int dTrain = 0;
@@ -48,71 +30,46 @@ class Program
         int ctCount = 0;
         int trainCount = 0;
 
-        Stopwatch noRollWatch = Stopwatch.StartNew();
-        Stopwatch midRollWatch = Stopwatch.StartNew();
         // Run the loop until the application is closed
         while (true)
         {
             // Wait for a short period before checking again (you can adjust the time as needed)
             Thread.Sleep(10);
 
-            // Update Roll info
-            Console.SetCursorPosition(13, 41);
-            Console.ForegroundColor = rollGoing ? ConsoleColor.Green : ConsoleColor.Red;
-            Console.Write(rollGoing + " ");
-
             // Find the div element
-            IReadOnlyList<IWebElement> divElements = driver.FindElements(By.CssSelector(divSelector));
+            IReadOnlyList<IWebElement> divElements = analyzer.GetDivElements();
 
             string? innerText = null;
-            if (divElements.Count > 0)
+            try
             {
-                try
+                if (divElements.Count > 0)
                 {
                     innerText = divElements[0].Text;
                 }
-                catch (StaleElementReferenceException)
-                {
-                    // Handle the StaleElementReferenceException by re-finding the element
-                    divElements = driver.FindElements(By.CssSelector(divSelector));
+            }
+            catch (StaleElementReferenceException)
+            {
+                // Handle the StaleElementReferenceException by re-finding the element
+                divElements = analyzer.GetDivElements();
 
-                    if (divElements.Count > 0)
-                    {
-                        innerText = divElements[0].Text;
-                    }
+                if (divElements.Count > 0)
+                {
+                    innerText = divElements[0].Text;
                 }
             }
 
-            if (innerText != null && (innerText == "0.00" || innerText == ""))//!backgroundPosition.Contains("451px"))
+            if (innerText != null && (innerText == "0.00" || innerText == ""))
             {
                 rollGoing = true;
             }
 
-            // *** Handle Crashes *** (Website goes offline for a few seconds sometimes but the rolls don't stop)
-            // Define the CSS selector for the SVG element
-            string svgSelector = "svg[data-v-56be08fe].loader-spinner";
-
-            // Find the SVG element
-            IReadOnlyList<IWebElement> svgElements = driver.FindElements(By.CssSelector(svgSelector));
-
-            bool hasElement = svgElements.Count > 0;
-
-            if (rollGoing)
-            {
-                noRollWatch.Restart();
-            }
-            else if (!rollGoing)
-            {
-                midRollWatch.Restart();
-            }
+            // Update Roll info
+            consoleUI.DrawStat(13, 41, innerText/*rollGoing + " "*/, rollGoing ? ConsoleColor.Green : ConsoleColor.Red);
 
             // Check if the page source has changed, indicating a dice roll
-            if (rollGoing && innerText != null && (innerText == "0.00" || innerText == ""))
+            if (rollGoing && innerText != null && innerText != "0.00" && innerText != "")
             {
-                List<IWebElement> previousRolls = driver.FindElements(
-                    By.CssSelector("div.previous-rolls-item"))
-                    .Take(10)
-                    .Select(parent => parent.FindElement(By.CssSelector("div:nth-child(1)"))).ToList();
+                List<IWebElement> previousRolls = analyzer.GetPreviousRolls();
 
                 // Create a list to store the child classes as strings
                 if (previousCoins.Count == 0)
@@ -161,35 +118,26 @@ class Program
                 Console.Clear();
 
                 // Draw the Menu
-                Console.ForegroundColor = ConsoleColor.White;
-                foreach (string row in menuSprite)
-                {
-                    Console.WriteLine(row);
-                }
+                consoleUI.DrawMenu();
 
                 // Update Last 30
                 if (previousCoins.Count > 0)
                 {
                     int xVal = 93;
                     int yVal = 13;
-                    for (int i = previousCoins.Count - 1, l = 1; i >= previousCoins.Count - 90 && i >= 0; i--, l++)
+                    for (int i = previousCoins.Count - 1, coinsDrew = 1; i >= previousCoins.Count - 90 && i >= 0; i--, coinsDrew++)
                     {
-                        Console.SetCursorPosition(xVal, yVal);
-                        Console.ForegroundColor = previousCoins[i] == "coin-t" ? ConsoleColor.DarkYellow : previousCoins[i] == "coin-ct" ? ConsoleColor.Blue : ConsoleColor.White;
-                        for (int j = 0; j < 3; j++)
-                        {
-                            Console.Write(coinSprite);
-                            Console.SetCursorPosition(xVal, yVal + j);
-                        }
+                        ConsoleColor color = previousCoins[i] == "coin-t" ? ConsoleColor.DarkYellow : previousCoins[i] == "coin-ct" ? ConsoleColor.Blue : ConsoleColor.White;
+                        consoleUI.DrawCoin(xVal, yVal, color);
 
                         xVal -= 3;
 
-                        if (l == 30)
+                        if (coinsDrew == 30)
                         {
                             yVal = 17;
                             xVal = 93;
                         }
-                        if (l == 60)
+                        if (coinsDrew == 60)
                         {
                             yVal = 21;
                             xVal = 93;
@@ -204,23 +152,17 @@ class Program
                     for (int i = 0; i < 3; i++)
                     {
                         int currentX = 32 + i * 14;
-                        Console.SetCursorPosition(currentX, 27);
-                        Console.ForegroundColor = i == 0 ? ConsoleColor.Blue : i == 1 ? ConsoleColor.White : ConsoleColor.DarkYellow;
-                        for (int j = 0; j < 3; j++)
-                        {
-                            Console.Write(coinSprite);
-                            Console.SetCursorPosition(currentX, 27 + j);
-                        }
+                        ConsoleColor color = i == 0 ? ConsoleColor.Blue : i == 1 ? ConsoleColor.White : ConsoleColor.DarkYellow;
+                        consoleUI.DrawCoin(currentX, 27, color);
 
                         // Update Text
-                        Console.SetCursorPosition(currentX + 4, 28);
-                        Console.Write(last100Coins.Count(s => s == (i == 0 ? "coin-ct" : i == 1 ? "coin-bonus" : "coin-t")));
+                        string numOfCoins = last100Coins.Count(s => s == (i == 0 ? "coin-ct" : i == 1 ? "coin-bonus" : "coin-t")).ToString();
+                        consoleUI.DrawStat(currentX + 4, 28, numOfCoins);
                     }
                 }
                 else
                 {
-                    Console.SetCursorPosition(33, 28);
-                    Console.Write("Don't have 100 coins registered yet");
+                    consoleUI.DrawStat(33, 28, "Don't have 100 coins registered yet");
                 }
 
                 // Update Last 1000
@@ -230,23 +172,17 @@ class Program
                     for (int i = 0; i < 3; i++)
                     {
                         int currentX = 32 + i * 14;
-                        Console.SetCursorPosition(currentX, 34);
-                        Console.ForegroundColor = i == 0 ? ConsoleColor.Blue : i == 1 ? ConsoleColor.White : ConsoleColor.DarkYellow;
-                        for (int j = 0; j < 3; j++)
-                        {
-                            Console.Write(coinSprite);
-                            Console.SetCursorPosition(currentX, 34 + j);
-                        }
+                        ConsoleColor color = i == 0 ? ConsoleColor.Blue : i == 1 ? ConsoleColor.White : ConsoleColor.DarkYellow;
+                        consoleUI.DrawCoin(currentX, 34, color);
 
                         // Update Text
-                        Console.SetCursorPosition(currentX + 4, 35);
-                        Console.Write(last100Coins.Count(s => s == (i == 0 ? "coin-ct" : i == 1 ? "coin-bonus" : "coin-t")));
+                        string numOfCoins = last100Coins.Count(s => s == (i == 0 ? "coin-ct" : i == 1 ? "coin-bonus" : "coin-t")).ToString();
+                        consoleUI.DrawStat(currentX + 4, 35, numOfCoins);
                     }
                 }
                 else
                 {
-                    Console.SetCursorPosition(33, 34);
-                    Console.Write("Don't have 1000 coins registered yet");
+                    consoleUI.DrawStat(33, 35, "Don't have 1000 coins registered yet");
                 }
 
                 // *** Update Longest Trains ***
@@ -335,7 +271,6 @@ class Program
                     }
                 }
 
-                // Update Longest Trains text
                 Console.ForegroundColor = ConsoleColor.White;
                 double expectedBonus = previousCoins.Count * (1.0 / 15);
                 double expectedOrange = previousCoins.Count * (7.0 / 15);
@@ -347,95 +282,21 @@ class Program
                 
                 double totalUnderrepresented = underrepresentedBonus + underrepresentedOrange + underrepresentedBlack;
 
-
                 double convergenceProbabilityBonus = underrepresentedBonus / totalUnderrepresented;
                 double convergenceProbabilityOrange = underrepresentedOrange / totalUnderrepresented;
                 double convergenceProbabilityBlack = underrepresentedBlack / totalUnderrepresented;
 
-                Console.SetCursorPosition(23, 43);
-                Console.Write($"{convergenceProbabilityBlack * 100:0.00}%");
-                Console.SetCursorPosition(22, 45);
-                Console.Write($"{convergenceProbabilityOrange * 100:0.00}%");
-                Console.SetCursorPosition(25, 47);
-                Console.Write($"{convergenceProbabilityBonus * 100:0.00}%");
-                Console.SetCursorPosition(24, 49);
-                Console.Write(ctDTrain);
-                Console.SetCursorPosition(23, 51);
-                Console.Write(tDTrain);
-                Console.SetCursorPosition(22, 53);
-                Console.Write(ctTrain);
-                Console.SetCursorPosition(21, 55);
-                Console.Write(tTrain);
-                Console.SetCursorPosition(24, 57);
-                Console.Write(dTrain);
-                Console.SetCursorPosition(60, 43);
-                Console.Write("Total Number of 10+ Trains: " + trainCount);
+                // Update Longest Trains text
+                consoleUI.DrawStat(23, 43, $"{convergenceProbabilityBlack * 100:0.00}%");
+                consoleUI.DrawStat(22, 45, $"{convergenceProbabilityOrange * 100:0.00}%");
+                consoleUI.DrawStat(25, 47, $"{convergenceProbabilityBonus * 100:0.00}%");
+                consoleUI.DrawStat(24, 49, ctDTrain.ToString());
+                consoleUI.DrawStat(23, 51, tDTrain.ToString());
+                consoleUI.DrawStat(22, 53, ctTrain.ToString());
+                consoleUI.DrawStat(21, 55, tTrain.ToString());
+                consoleUI.DrawStat(24, 57, dTrain.ToString());
+                consoleUI.DrawStat(60, 43, $"Total Number of 10+ Trains: {trainCount}");
             }
         }
     }
-
-    public static string[] menuSprite = {
-        "*****************************************************************************************************",
-        @"*                  _____                                   __________           __                  *",
-        @"*                 /     \    ____    ____    ____   ___.__.\______   \  ____  _/  |_                *",
-        @"*                /  \ /  \  /  _ \  /    \ _/ __ \ <   |  | |    |  _/ /  _ \ \   __\               *",
-        @"*               /    Y    \(  <_> )|   |  \\  ___/  \___  | |    |   \(  <_> ) |  |                 *",
-        @"*               \____|__  / \____/ |___|  / \___  > / ____| |______  / \____/  |__|                 *",
-        @"*                       \/              \/      \/  \/             \/                               *",
-        "*                                                                                                   *",
-        "*****************************************************************************************************",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                            Last 30                                                *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                            Last 100                                               *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                            Last 1000                                              *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*                                                                                                   *",
-        "*****************************************************************************************************",
-        "*                                               *",
-        "*   Rolling:                                    *",
-        "*                                               *",
-        "*   Current CT Chance:                          *",
-        "*                                               *",
-        "*   Current T Chance:                           *",
-        "*                                               *",
-        "*   Current Dice Chance:                        *",
-        "*                                               *",
-        "*   Longest CT/D Train:                         *",
-        "*                                               *",
-        "*   Longest T/D Train:                          *",
-        "*                                               *",
-        "*   Longest CT Train:                           *",
-        "*                                               *",
-        "*   Longest T Train:                            *",
-        "*                                               *",
-        "*   Longest Dice Train:                         *",
-        "*                                               *",
-        "*************************************************",
-    };
-
-    public static string coinSprite = "██";
 }
