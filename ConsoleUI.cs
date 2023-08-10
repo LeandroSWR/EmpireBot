@@ -77,6 +77,7 @@ namespace CSGOEmpireBot
 
         public void DrawMenu()
         {
+            Console.Clear();
             Console.ForegroundColor = ConsoleColor.White;
             foreach (string row in menuSprite)
             {

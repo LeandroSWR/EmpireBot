@@ -49,24 +49,7 @@ class Program
 
                 coinHandler.UpdateCoinsFromRoll(previousRolls);
 
-                // UPDATE THIS
-                //********************************************************
-
-                // Check if the list contains the certain string
-                IEnumerable<Coin> last10 = coinHandler.GetLastXCoins(10);
-
-                if (!last10.Contains(Coin.CT) || !last10.Contains(Coin.T))
-                {
-                    // Perform the sound notification here (e.g., play a beep sound)
-                    Console.Beep();
-                }
-
-                //********************************************************
-
-
                 rollGoing = false;
-
-                Console.Clear();
 
                 // Draw the Menu
                 consoleUI.DrawMenu();
